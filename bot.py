@@ -4,7 +4,25 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 from yt_dlp import YoutubeDL
 from shazamio import Shazam
 import config
+from flask import Flask
+import threading
 
+# ---- Render uchun web server ----
+flask_app = Flask(__name__)
+@flask_app.route('/')
+def home():
+    return "Bot ishlayapti! 🤖"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host="0.0.0.0", port=port)
+
+threading.Thread(target=run_web, daemon=True).start()
+# ---------------------------------
+
+logging.basicConfig(level=logging.INFO)
+DOWNLOAD_DIR = "downloads"
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 logging.basicConfig(level=logging.INFO)
 DOWNLOAD_DIR = "downloads"
