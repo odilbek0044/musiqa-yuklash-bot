@@ -55,20 +55,33 @@ Men darhol sizga <b>VIDEO + AUDIO</b> ni yuboraman! 🚀
 """
 
 ABOUT_TEXT = """
-🤖 <b>Bot Haqida ℹ</b>
+🤖 <b>Musiqa Yuklash Bot haqida</b> ✨
 ━━━━━━━━━━━━━━━━━━━━━━
-📅 <b>Yaratilgan sana:</b> 2026, Sentabr 🗓
-💻 <b>Dasturchi:</b> Odilbek Axtamov 💻
-🚀 <b>Bot nomi:</b> Musiqa Yuklash Bot 🎧
-⚙ <b>Texnologiya:</b> Python + yt-dlp + Shazam 🐍
+🎧 <b>Bu bot nima qila oladi?</b>
 
-💡 <b>Bu bot nima qiladi?</b>
-YouTube, Instagram dan
-video va musiqalarni tez yuklab beradi va audiosini kesib MP3 formatda beradi!
-🎤 Golos yuborsangiz Shazam orqali topib beradi!
-✨ Sifati zo'r va juda tez!
+🎬 <b>Video Yuklash:</b>
+YouTube, Instagram va boshqa platformalardan videolarni yuqori sifatda yuklab beradi!
 
-Barcha huquqlar himoyalangan © 2025 🛡
+🎵 <b>Audio Ajratish:</b>
+Yuklangan videoni avtomatik ravishda MP3 formatga o'tkazib, musiqasini alohida yuboradi!
+
+🎤 <b>Shazam Xizmati:</b>
+Ovozli xabar yoki video yuborsangiz, ichidagi musiqani Shazam orqali topib, yuklab beradi!
+
+🔍 <b>Qidiruv:</b>
+Qo'shiq nomini yozing, masalan:
+<code>Alan Walker - Alone</code>
+Men eng yaxshi natijalarni topib beraman!
+
+━━━━━━━━━━━━━━━━━━━━━━
+⚙️ <b>Texnologiyalar:</b>
+Python, yt-dlp, ShazamIO, FFmpeg
+
+👨‍💻 <b>Dasturchi:</b> Odilbek Axtamov
+📅 <b>Ishga tushgan:</b> 2026-yil, Sentyabr
+🔗 <b>Aloqa:</b> @odilbek_axtamov
+
+Barcha huquqlar himoyalangan © 2026 🛡️
 """
 
 ADMIN_TEXT = """
