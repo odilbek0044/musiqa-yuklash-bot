@@ -23,6 +23,7 @@ threading.Thread(target=run_web, daemon=True).start()
 logging.basicConfig(level=logging.INFO)
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+PER_PAGE = 6
 
 def clean_downloads():
     try:
@@ -111,14 +112,15 @@ def is_url(text):
 
 def search_youtube(query):
     ydl_opts = {
-        'quiet': True, 'no_warnings': True, 'extract_flat': True,
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+        'quiet': True, 
+        'no_warnings': True, 
+        'extract_flat': True,
+        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+        'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}}
     }
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(f"ytsearch20:{query}", download=False)
         return info.get('entries', [])[:20]
-
-PER_PAGE = 6
 
 def build_search_text(query, results, page):
     total_pages = (len(results) + PER_PAGE - 1) // PER_PAGE
@@ -231,9 +233,13 @@ async def download_and_send(url, context, status_msg, chat_id):
             ydl_opts = {
                 'format': fmt,
                 'outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),
-                'quiet': True, 'no_warnings': True, 'noplaylist': True,
-                'socket_timeout': 30, 'retries': 10,
-                'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'web']}},
+                'quiet': True, 
+                'no_warnings': True, 
+                'noplaylist': True,
+                'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,  # <-- QO'SHING
+                'socket_timeout': 30, 
+                'retries': 10,
+                'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}},  # <-- QO'SHING
             }
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -557,7 +563,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("😔 Avval musiqa yuboring, keyin video bosing!")
             return
         status = await context.bot.send_message(chat_id=chat_id, text="📹 <b>Video yuklanmoqda...</b> 🎬", parse_mode='HTML')
-        ydl_opts = {'format': 'bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b','outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),'quiet': True,'noplaylist': True,'merge_output_format': 'mp4',}
+        ydl_opts = {'format': 'bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b','outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),'quiet': True,'noplaylist': True,'merge_output_format': 'mp4','cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}}}
         try:
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -583,7 +589,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_eff = await context.bot.send_message(chat_id=chat_id, text=f"✨ Effekt qilinmoqda...", parse_mode='HTML')
         tmp_path = None; eff_path = None
         try:
-            ydl_opts = {'format': 'bestaudio[ext=m4a]/bestaudio/best','outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),'quiet': True,'noplaylist': True}
+            ydl_opts = {'format': 'bestaudio[ext=m4a]/bestaudio/best','outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),'quiet': True,'noplaylist': True,'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}}}
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True); vid = info['id']
                 for f in os.listdir(DOWNLOAD_DIR):
@@ -695,7 +701,7 @@ def main():
     app.add_handler(CommandHandler("users", stats_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE | filters.VIDEO | filters.VIDEO_NOTE | filters.AUDIO, handle_voice_video))
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
     main()
