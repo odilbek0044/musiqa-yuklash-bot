@@ -556,10 +556,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['pending_video_title'] = title
     elif query.data == "cancel_inline":
         try: await query.edit_message_reply_markup(reply_markup=None)
-        except: pass
-        context.user_data['pending_video_url'] = None
-        context.user_data['pending_video_title'] = None
-        context.user_data['pending_video_caption'] = None
+        except: pass  
     elif query.data == "lyrics_yes":
         title = context.user_data.get('pending_video_title', 'Video')
         status_lyrics = await context.bot.send_message(chat_id=chat_id, text=f"🎤 <b>{html.escape(title)}</b> uchun so'zlar qidirilmoqda... 📜✨", parse_mode='HTML')
@@ -588,8 +585,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: pass
             try: await status.delete()
             except: pass
-        context.user_data['pending_video_url'] = None
-        context.user_data['pending_video_title'] = None
     elif query.data.startswith("effect_"):
         effect = query.data.split("_")[1]
         title = context.user_data.get('pending_video_title', 'Audio'); url = context.user_data.get('pending_video_url')
