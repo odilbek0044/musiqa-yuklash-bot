@@ -1,5 +1,5 @@
 python-telegram-bot==20.7
-yt-dlp
-shazamio
-requests
+yt-dlp==2024.12.23
+ShazamIO
 Flask
+requests
