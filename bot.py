@@ -222,7 +222,7 @@ async def download_and_send(url, context, status_msg, chat_id):
             await status_msg.edit_text(txt, parse_mode='HTML')
         except:
             pass
-        await asyncio.sleep(3)
+        await asyncio.sleep(1.5)
     formats_to_try = [
         'bestaudio[ext=m4a]/bestaudio/best',
         'bestaudio/best',
