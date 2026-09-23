@@ -620,32 +620,55 @@ def build_admin_message(admin_text):
     return text, keyboard
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id!= config.ADMIN_ID:
+    if update.effective_user.id != config.ADMIN_ID:
         await update.message.reply_text("⛔ Siz admin emassiz!")
         return
+    
+    # Matnni olish
     if update.message.reply_to_message:
-        admin_text = update.message.reply_to_message.text or update.message.reply_to_message.caption or "Xabar"
+        admin_text = update.message.reply_to_message.text or update.message.reply_to_message.caption or ""
     else:
         if not context.args:
-            await update.message.reply_text("📢 Foydalanish: <code>/broadcast Salom!</code> yoki xabarga reply qilib /broadcast", parse_mode='HTML')
+            await update.message.reply_text("📢 Foydalanish: <code>/broadcast Salom!</code>\nYoki xabarga reply qilib /broadcast yozing", parse_mode='HTML')
             return
         admin_text = " ".join(context.args)
+
     if not os.path.exists("users.txt"):
-        await update.message.reply_text("😔 Hali user yo'q!")
+        await update.message.reply_text("😔 Hali user yo'q! users.txt topilmadi")
         return
+
     with open("users.txt", "r", encoding="utf-8") as f:
         users = [int(line.strip()) for line in f if line.strip().isdigit()]
+
+    if not users:
+        await update.message.reply_text("😔 Userlar ro'yxati bo'sh!")
+        return
+
     text, keyboard = build_admin_message(admin_text)
-    status = await update.message.reply_text(f"🚀 {len(users)} ta userga yuborilmoqda...", parse_mode='HTML')
+    status = await update.message.reply_text(f"🚀 {len(users)} ta userga yuborilmoqda... 0/{len(users)}", parse_mode='HTML')
+    
     success = 0
-    for uid in users:
+    blocked = 0
+    
+    for idx, uid in enumerate(users, 1):
         try:
             await context.bot.send_message(chat_id=uid, text=text, parse_mode='HTML', reply_markup=keyboard)
             success += 1
-            await asyncio.sleep(0.05)
-        except:
-            pass
-    await status.edit_text(f"✅ {success} ta userga professional xabar yuborildi!")
+        except Exception as e:
+            # Blocklagan yoki o'chirgan user
+            if "blocked" in str(e).lower() or "not found" in str(e).lower():
+                blocked += 1
+            logging.warning(f"Broadcast xato {uid}: {e}")
+        
+        # Har 5 tada status yangilash + 0.07 sek kutish (flood dan qutulish uchun)
+        if idx % 5 == 0:
+            try:
+                await status.edit_text(f"🚀 Yuborilmoqda... {idx}/{len(users)}\n✅ Yuborildi: {success}\n🚫 Block: {blocked}", parse_mode='HTML')
+            except:
+                pass
+        await asyncio.sleep(0.07)  # 0.05 emas, 0.07 qo'ying - Telegram 20ta/sek dan ko'pga ban beradi!
+
+    await status.edit_text(f"✅ <b>Broadcast tugadi!</b>\n\n📊 Jami: {len(users)} ta\n✅ Yuborildi: {success} ta\n🚫 Blocklagan: {blocked} ta", parse_mode='HTML')
 
 async def send_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id!= config.ADMIN_ID:
