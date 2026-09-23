@@ -14,7 +14,7 @@ def home():
     return "Bot ishlayapti! 🤖"
 
 def run_web():
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 8080))
     flask_app.run(host="0.0.0.0", port=port)
 
 threading.Thread(target=run_web, daemon=True).start()
