@@ -518,7 +518,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status = await update.message.reply_text(f"🔍 <b>\"{html.escape(txt)}\" qidirilmoqda...</b> 🎵✨", parse_mode='HTML')
         results = search_youtube(txt)
         if not results:
-            await status.edit_text("❌ <b>Topilmadi!</b> 😔")
+            await status.edit_text("❌ Topilmadi! Qayta urinib ko'ring 😔")
             return
         context.user_data['last_search_results'] = results
         context.user_data['last_search_query'] = txt
