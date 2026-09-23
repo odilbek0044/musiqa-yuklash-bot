@@ -1,23 +1,12 @@
-# fly.toml app configuration file generated for musiqa-yuklash-bot on 2026-09-23T06:18:17Z
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
-
 app = 'musiqa-yuklash-bot'
 primary_region = 'fra'
 
 [build]
 
 [http_service]
-  internal_port = 8080
+  internal_port = 10000
   force_https = true
   auto_stop_machines = false
   auto_start_machines = true
   min_machines_running = 1
   processes = ['app']
-
-[[vm]]
-  memory = '1gb'
-  cpu_kind = 'shared'
-  cpus = 1
-  memory_mb = 1024
