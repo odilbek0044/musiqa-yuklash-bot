@@ -53,7 +53,7 @@ Men siz uchun:
 ⚡ <b>Juda tez, sifatli, bepul!</b>
 ━━━━━━━━━━━━━━━━━━━━━━
 👇 <b>Qanday ishlatiladi?</b>
-1⃣ 🔗 Menga link yuboring (YouTube playlist ham! 📂)
+1⃣ 🔗 Menga link yuboring
 2⃣ 🔍 Yoki qo'shiq nomini yozing:
    <code>Alan Walker - Alone</code>
 3⃣ 🎤 Golos yoki video yuboring!
@@ -74,9 +74,6 @@ Yuklangan videoni avtomatik ravishda MP3 formatga o'tkazib, musiqasini alohida y
 
 🎤 <b>Shazam Xizmati:</b>
 Ovozli xabar yoki video yuborsangiz, ichidagi musiqani Shazam orqali topib, yuklab beradi!
-
-📂 <b>Playlist Yuklash:</b>
-YouTube playlist linkini yuboring, men hammasini MP3/MP4 da yuklab beraman! 30 tagacha bir vaqtda!
 
 🔍 <b>Qidiruv:</b>
 Qo'shiq nomini yozing, masalan:
@@ -112,38 +109,13 @@ def main_keyboard():
         [InlineKeyboardButton("💡 Takliflar va tavsiyalar", callback_data="feedback")]
     ])
 
-def is_playlist_url(url):
-    return "list=" in url and ("youtube.com" in url or "youtu.be" in url)
-
-def get_playlist_videos(playlist_url):
-    try:
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': True,
-            'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
-            'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}}
-        }
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(playlist_url, download=False)
-            entries = info.get('entries', [])
-            # Faqat valid videolarni olamiz
-            videos = []
-            for e in entries:
-                if e and e.get('id'):
-                    videos.append(e)
-            return videos
-    except Exception as e:
-        logging.error(f"Playlist olishda xato: {e}")
-        return []
-
 def is_url(text):
     return text.startswith("http://") or text.startswith("https://")
 
 def search_youtube(query):
     ydl_opts = {
-        'quiet': True, 
-        'no_warnings': True, 
+        'quiet': True,
+        'no_warnings': True,
         'extract_flat': True,
         'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
         'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}}
@@ -263,13 +235,13 @@ async def download_and_send(url, context, status_msg, chat_id):
             ydl_opts = {
                 'format': fmt,
                 'outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),
-                'quiet': True, 
-                'no_warnings': True, 
+                'quiet': True,
+                'no_warnings': True,
                 'noplaylist': True,
-                'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,  # <-- QO'SHING
-                'socket_timeout': 30, 
+                'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+                'socket_timeout': 30,
                 'retries': 10,
-                'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}},  # <-- QO'SHING
+                'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}},
             }
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -473,37 +445,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ <b>Rahmat! Xabaringiz yuborildi!</b>", parse_mode='HTML', reply_markup=main_keyboard())
         return
 
-    # ---- PLAYLIST TEKSHIRUV ----
-    if is_playlist_url(txt):
-        status = await update.message.reply_text("📂 <b>Playlist tekshirilmoqda...</b> 🔍", parse_mode='HTML')
-        videos = get_playlist_videos(txt)
-        if not videos:
-            await status.edit_text("❌ <b>Playlist topilmadi yoki bo'sh!</b> 😔", parse_mode='HTML')
-            return
-        
-        # Eslab qolamiz
-        context.user_data['playlist_videos'] = videos
-        context.user_data['playlist_url'] = txt
-        context.user_data['playlist_user_msg_id'] = update.message.message_id
-        context.user_data['playlist_bot_msg_id'] = status.message_id
-
-        count = len(videos)
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🎧 Musiqalarni MP3 da olish ({count} ta)", callback_data="pl_mp3")],
-            [InlineKeyboardButton(f"📹 Videolarni MP4 da olish ({count} ta)", callback_data="pl_mp4")],
-            [InlineKeyboardButton("❌ Bekor qilish", callback_data="pl_cancel")]
-        ])
-        
-        await status.edit_text(
-            f"📂 <b>Playlist topildi!</b> 🎉\n\n"
-            f"🎵 <b>{count} ta musiqa bor</b>\n\n"
-            f"👇 <b>Sizning mikslaringiz bo'yicha natija berish uchun quyidagilardan hohlaganingizni tanlang:</b>",
-            parse_mode='HTML',
-            reply_markup=keyboard
-        )
-        return
-    # ---- PLAYLIST TUGADI ----
-    
     if is_url(txt):
         if "tiktok.com" in txt:
             await update.message.reply_text("🚫 <b>TikTok o'chirilgan!</b>", parse_mode='HTML', reply_markup=main_keyboard())
@@ -563,120 +504,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     chat_id = query.message.chat.id
 
-    # ---- PLAYLIST TUGMALARI ----
-    if query.data.startswith("pl_"):
-        videos = context.user_data.get('playlist_videos', [])
-        user_msg_id = context.user_data.get('playlist_user_msg_id')
-        bot_msg_id = context.user_data.get('playlist_bot_msg_id')
-
-        if query.data == "pl_cancel":
-            # Ikkala xabarni ham o'chirish
-            try:
-                await context.bot.delete_message(chat_id=chat_id, message_id=bot_msg_id)
-            except: pass
-            try:
-                if user_msg_id:
-                    await context.bot.delete_message(chat_id=chat_id, message_id=user_msg_id)
-            except: pass
-            await context.bot.send_message(chat_id=chat_id, text="🏠 Asosiy oyna", reply_markup=main_keyboard())
-            context.user_data.pop('playlist_videos', None)
-            return
-
-        if query.data in ["pl_mp3", "pl_mp4"]:
-            is_mp3 = query.data == "pl_mp3"
-            # Inline tugmali xabarni o'chirish - siz aytgandek!
-            try:
-                await query.message.delete()
-            except: pass
-            
-            count = len(videos)
-            status = await context.bot.send_message(chat_id=chat_id, text=f"🚀 <b>{count} ta musiqa yuklanmoqda...</b> 0/{count}", parse_mode='HTML')
-            
-            success = 0
-            for idx, video in enumerate(videos, 1):
-                video_id = video.get('id')
-                video_title = video.get('title', f'Video {idx}')[:50]
-                url = f"https://www.youtube.com/watch?v={video_id}"
-                
-                try:
-                    await status.edit_text(f"⏳ <b>{idx}/{count}</b> yuklanmoqda...\n🎵 {html.escape(video_title)}", parse_mode='HTML')
-                except: pass
-
-                try:
-                    if is_mp3:
-                        # MP3 yuklash
-                        ydl_opts = {
-                            'format': 'bestaudio[ext=m4a]/bestaudio/best',
-                            'outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),
-                            'quiet': True, 'no_warnings': True, 'noplaylist': True,
-                            'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
-                            'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}}
-                        }
-                        with YoutubeDL(ydl_opts) as ydl:
-                            info = ydl.extract_info(url, download=True)
-                            vid = info['id']
-                            title = info.get('title', video_title)
-                            file_path = None
-                            for f in os.listdir(DOWNLOAD_DIR):
-                                if f.startswith(vid):
-                                    file_path = os.path.join(DOWNLOAD_DIR, f)
-                                    break
-                        if file_path and os.path.exists(file_path):
-                            # MP3 ga o'tkazish
-                            mp3_path = os.path.join(DOWNLOAD_DIR, f"{vid}_final.mp3")
-                            try:
-                                subprocess.run(['ffmpeg','-y','-i',file_path,'-vn','-q:a','2',mp3_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
-                                if os.path.exists(mp3_path):
-                                    try: os.remove(file_path)
-                                    except: pass
-                                    file_path = mp3_path
-                            except: pass
-                            
-                            with open(file_path, 'rb') as af:
-                                await context.bot.send_audio(chat_id=chat_id, audio=af, title=title, caption=f"🎵 <b>{html.escape(title)}</b>", parse_mode='HTML')
-                            try: os.remove(file_path)
-                            except: pass
-                            success += 1
-                    else:
-                        # MP4 yuklash
-                        ydl_opts = {
-                            'format': 'bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b',
-                            'outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),
-                            'quiet': True, 'no_warnings': True, 'noplaylist': True,
-                            'merge_output_format': 'mp4',
-                            'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
-                            'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}}
-                        }
-                        with YoutubeDL(ydl_opts) as ydl:
-                            info = ydl.extract_info(url, download=True)
-                            vid = info['id']
-                            title = info.get('title', video_title)
-                            file_path = None
-                            for f in os.listdir(DOWNLOAD_DIR):
-                                if f.startswith(vid) and f.endswith(('.mp4','.mkv','.webm')):
-                                    file_path = os.path.join(DOWNLOAD_DIR, f)
-                                    break
-                        if file_path and os.path.exists(file_path):
-                            with open(file_path, 'rb') as vf:
-                                await context.bot.send_video(chat_id=chat_id, video=vf, caption=f"🎬 <b>{html.escape(title)}</b>", parse_mode='HTML')
-                            try: os.remove(file_path)
-                            except: pass
-                            success += 1
-                            
-                except Exception as e:
-                    logging.error(f"Playlist video xato {video_id}: {e}")
-                    continue
-                
-                await asyncio.sleep(1) # Flood dan saqlanish
-            
-            try:
-                await status.delete()
-            except: pass
-            await context.bot.send_message(chat_id=chat_id, text=f"✅ <b>Tugadi!</b>\n\n📊 Jami: {count} ta\n✅ Yuborildi: {success} ta", parse_mode='HTML', reply_markup=main_keyboard())
-            context.user_data.pop('playlist_videos', None)
-            return
-    # ---- PLAYLIST TUGADI ----
-    
     if query.data == "reply_to_admin":
         prompt_msg = await query.message.reply_text("✍ <b>Javobingizni yozing:</b>\nAdmin sizga javob beradi!", parse_mode='HTML')
         context.user_data['awaiting_admin_reply'] = True
@@ -796,11 +623,10 @@ def build_admin_message(admin_text):
     return text, keyboard
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != config.ADMIN_ID:
+    if update.effective_user.id!= config.ADMIN_ID:
         await update.message.reply_text("⛔ Siz admin emassiz!")
         return
-    
-    # Matnni olish
+
     if update.message.reply_to_message:
         admin_text = update.message.reply_to_message.text or update.message.reply_to_message.caption or ""
     else:
@@ -823,27 +649,25 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text, keyboard = build_admin_message(admin_text)
     status = await update.message.reply_text(f"🚀 {len(users)} ta userga yuborilmoqda... 0/{len(users)}", parse_mode='HTML')
-    
+
     success = 0
     blocked = 0
-    
+
     for idx, uid in enumerate(users, 1):
         try:
             await context.bot.send_message(chat_id=uid, text=text, parse_mode='HTML', reply_markup=keyboard)
             success += 1
         except Exception as e:
-            # Blocklagan yoki o'chirgan user
             if "blocked" in str(e).lower() or "not found" in str(e).lower():
                 blocked += 1
             logging.warning(f"Broadcast xato {uid}: {e}")
-        
-        # Har 5 tada status yangilash + 0.07 sek kutish (flood dan qutulish uchun)
+
         if idx % 5 == 0:
             try:
                 await status.edit_text(f"🚀 Yuborilmoqda... {idx}/{len(users)}\n✅ Yuborildi: {success}\n🚫 Block: {blocked}", parse_mode='HTML')
             except:
                 pass
-        await asyncio.sleep(0.07)  # 0.05 emas, 0.07 qo'ying - Telegram 20ta/sek dan ko'pga ban beradi!
+        await asyncio.sleep(0.07)
 
     await status.edit_text(f"✅ <b>Broadcast tugadi!</b>\n\n📊 Jami: {len(users)} ta\n✅ Yuborildi: {success} ta\n🚫 Blocklagan: {blocked} ta", parse_mode='HTML')
 
