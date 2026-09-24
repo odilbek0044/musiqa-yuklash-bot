@@ -580,50 +580,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if tmp_path and os.path.exists(tmp_path): os.remove(tmp_path)
             if eff_path and os.path.exists(eff_path): os.remove(eff_path)
 
-    # Faqat admin ishlata oladi
-    if update.effective_user.id!= config.ADMIN_ID:
-        await query.message.reply_text("⛔ Siz admin emassiz!")
-        return
-
-    # Xabarni olish - reply qilingan bo'lsa o'shani, bo'lmasa yozilgan textni
-    if update.message.reply_to_message:
-        msg_to_forward = update.message.reply_to_message
-        text_to_send = None
-    else:
-        if not context.args:
-            await update.message.reply_text(
-                "📢 <b>Foydalanish:</b>\n"
-                "<code>/broadcast Salom hammaga!</code>\n"
-                "yoki biror xabarga reply qilib <code>/broadcast</code> deb yozing!",
-                parse_mode='HTML'
-            )
-            return
-        text_to_send = " ".join(context.args)
-        msg_to_forward = None
-
-    if not os.path.exists("users.txt"):
-        await update.message.reply_text("😔 Hali userlar yo'q!")
-        return
-
-    with open("users.txt", "r", encoding="utf-8") as f:
-        users = [int(line.strip()) for line in f if line.strip().isdigit()]
-
-    status = await update.message.reply_text(f"🚀 <b>{len(users)} ta userga yuborilmoqda...</b>", parse_mode='HTML')
-
-    success = 0
-    failed = 0
-    for uid in users:
-        try:
-            if msg_to_forward:
-                await msg_to_forward.copy(chat_id=uid)
-            else:
-                await context.bot.send_message(chat_id=uid, text=text_to_send, parse_mode='HTML')
-            success += 1
-            await asyncio.sleep(0.05) # Telegram blocklamasligi uchun
-        except:
-            failed += 1
-
-    await status.edit_text(f"✅ <b>Yakunlandi!</b>\n\n✅ Yuborildi: {success}\n❌ Bloklagan: {failed}", parse_mode='HTML')
 
 # ===== PROFESSIONAL ADMIN PANEL =====
 
