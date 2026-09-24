@@ -77,6 +77,7 @@ def is_url(text):
 def search_youtube(query):
     ydl_opts = {
         'quiet': True, 'no_warnings': True, 'extract_flat': True,
+        'cookiefile': 'cookies.txt',
         'extractor_args': {'youtube': {'player_client': ['ios']}}
     }
     with YoutubeDL(ydl_opts) as ydl:
@@ -200,6 +201,7 @@ async def download_and_send(url, context, status_msg, chat_id):
                 'format': fmt,
                 'outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),
                 'quiet': True, 'no_warnings': True, 'noplaylist': True,
+                'cookiefile': 'cookies.txt',
                 'socket_timeout': 30, 'retries': 10,
                 'extractor_args': {'youtube': {'player_client': ['ios']}},
             }
