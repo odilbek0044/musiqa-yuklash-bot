@@ -582,7 +582,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Faqat admin ishlata oladi
     if update.effective_user.id!= config.ADMIN_ID:
-        await update.message.reply_text("⛔ Siz admin emassiz!")
+        await query.message.reply_text("⛔ Siz admin emassiz!")
         return
 
     # Xabarni olish - reply qilingan bo'lsa o'shani, bo'lmasa yozilgan textni
