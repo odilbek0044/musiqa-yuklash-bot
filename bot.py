@@ -257,6 +257,10 @@ async def download_and_send(url, context, status_msg, chat_id):
                         except: pass
             except: pass
             continue
+    try:
+        await status_msg.edit_text("❌ <b>Bu video mavjud emas, boshqa raqam tanlang!</b> 😔", parse_mode='HTML')
+    except: pass
+    await asyncio.sleep(3)
     try: await status_msg.delete()
     except: pass
     return None, None, None, url
