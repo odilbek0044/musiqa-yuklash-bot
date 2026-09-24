@@ -80,7 +80,6 @@ def search_youtube(query):
         'cookiefile': 'cookies.txt',
         'extractor_args': {'youtube': {'player_client': ['android', 'ios'], 'player_skip': ['webpage']}}
     }
-    }
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(f"ytsearch20:{query}", download=False)
         return info.get('entries', [])[:20]
