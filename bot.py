@@ -78,7 +78,8 @@ def search_youtube(query):
     ydl_opts = {
         'quiet': True, 'no_warnings': True, 'extract_flat': True,
         'cookiefile': 'cookies.txt',
-        'extractor_args': {'youtube': {'player_client': ['ios']}}
+        'extractor_args': {'youtube': {'player_client': ['android', 'ios'], 'player_skip': ['webpage']}}
+    }
     }
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(f"ytsearch20:{query}", download=False)
@@ -191,8 +192,9 @@ async def download_and_send(url, context, status_msg, chat_id):
             pass
         await asyncio.sleep(3)
     formats_to_try = [
-        'bestaudio[ext=m4a]/bestaudio/best',
         'bestaudio/best',
+        'best',
+    ]
     ]
     for fmt in formats_to_try:
         try:
@@ -203,7 +205,7 @@ async def download_and_send(url, context, status_msg, chat_id):
                 'quiet': True, 'no_warnings': True, 'noplaylist': True,
                 'cookiefile': 'cookies.txt',
                 'socket_timeout': 30, 'retries': 10,
-                'extractor_args': {'youtube': {'player_client': ['ios']}},
+                'extractor_args': {'youtube': {'player_client': ['android', 'ios'], 'player_skip': ['webpage']}},
             }
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -536,8 +538,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['pending_video_title'] = None
         context.user_data['pending_video_caption'] = None
     elif query.data == "lyrics_yes":
-        title = context.user_data.get('pending_video_title', 'Video')
-        safe_title = html.escape(title or "Qo'shiq")
+        title = context.user_data.get('pending_video_title') or 'Qo\'shiq'
+        safe_title = html.escape(title)
         status_lyrics = await context.bot.send_message(chat_id=chat_id, text=f"🎤 <b>{safe_title}</b> uchun so'zlar qidirilmoqda... 📜✨", parse_mode='HTML')
         lyrics = get_lyrics(title)
         try: await status_lyrics.delete()
@@ -551,7 +553,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         url = context.user_data.get('pending_video_url')
         if url:
             status = await context.bot.send_message(chat_id=chat_id, text="📹 <b>Video yuklanmoqda...</b> 🎬", parse_mode='HTML')
-            ydl_opts = {'format': 'bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b','outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),'quiet': True,'noplaylist': True,'merge_output_format': 'mp4',}
+            ydl_opts = {'format': 'bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b','outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),'quiet': True,'noplaylist': True,'merge_output_format': 'mp4','cookiefile': 'cookies.txt','extractor_args': {'youtube': {'player_client': ['android', 'ios'], 'player_skip': ['webpage']}},}
             try:
                 with YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=True); video_id = info['id']; video_path = None
@@ -573,7 +575,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_eff = await context.bot.send_message(chat_id=chat_id, text=f"✨ Effekt qilinmoqda...", parse_mode='HTML')
         tmp_path = None; eff_path = None
         try:
-            ydl_opts = {'format': 'bestaudio[ext=m4a]/bestaudio/best','outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),'quiet': True,'noplaylist': True}
+            ydl_opts = {'format': 'bestaudio/best','outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),'quiet': True,'noplaylist': True,'cookiefile': 'cookies.txt','extractor_args': {'youtube': {'player_client': ['android', 'ios'], 'player_skip': ['webpage']}},}
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True); vid = info['id']
                 for f in os.listdir(DOWNLOAD_DIR):
