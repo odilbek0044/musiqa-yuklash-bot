@@ -624,7 +624,7 @@ def build_admin_message(admin_text):
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id!= config.ADMIN_ID:
-        await update.message.reply_text("⛔ Siz admin emassiz!")
+        await query.message.reply_text("⛔ Siz admin emassiz!")
         return
 
     if update.message.reply_to_message:
