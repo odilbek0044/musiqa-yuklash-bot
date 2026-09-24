@@ -194,7 +194,6 @@ async def download_and_send(url, context, status_msg, chat_id):
         'bestaudio/best',
         'best',
     ]
-    ]
     for fmt in formats_to_try:
         try:
             await status_msg.edit_text("🎧 <b>Audio yuklanmoqda...</b> ⚡", parse_mode='HTML')
