@@ -121,7 +121,7 @@ def search_youtube(query):
         'socket_timeout': 30,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'web', 'mweb'],
+                'player_client': ['ios'],
                 'player_skip': ['webpage', 'configs']
             }
         },
@@ -260,7 +260,7 @@ async def download_and_send(url, context, status_msg, chat_id):
                 },
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['android', 'ios', 'mweb', 'web_safari', 'tv_embedded'],
+                        'player_client': ['ios'],
                         'player_skip': ['webpage', 'configs'],
                     }
                 },
@@ -684,9 +684,9 @@ def build_admin_message(admin_text):
     ])
     return text, keyboard
 
-async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id!= config.ADMIN_ID:
-        await update.message.reply_text("⛔ Siz admin emassiz!")
+async def broadcast(update: Update, context):
+    if update.effective_user.id != config.ADMIN_ID:
+        await update.message.reply_text("⛔ Siz admin emassiz!") # update.message
         return
 
     if update.message.reply_to_message:
