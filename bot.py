@@ -537,7 +537,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['pending_video_caption'] = None
     elif query.data == "lyrics_yes":
         title = context.user_data.get('pending_video_title', 'Video')
-        status_lyrics = await context.bot.send_message(chat_id=chat_id, text=f"🎤 <b>{html.escape(title)}</b> uchun so'zlar qidirilmoqda... 📜✨", parse_mode='HTML')
+        safe_title = html.escape(title or "Qo'shiq")
+        status_lyrics = await context.bot.send_message(chat_id=chat_id, text=f"🎤 <b>{safe_title}</b> uchun so'zlar qidirilmoqda... 📜✨", parse_mode='HTML')
         lyrics = get_lyrics(title)
         try: await status_lyrics.delete()
         except: pass
@@ -605,7 +606,7 @@ def build_admin_message(admin_text):
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id!= config.ADMIN_ID:
-        await update.message.reply_text("⛔ Siz admin emassiz!")
+        await update.effective_message.reply_text("⛔ Siz admin emassiz!")
         return
 
     if update.message.reply_to_message:
