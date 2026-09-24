@@ -118,7 +118,17 @@ def search_youtube(query):
         'no_warnings': True,
         'extract_flat': True,
         'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
-        'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}}
+        'socket_timeout': 30,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'web', 'mweb'],
+                'player_skip': ['webpage', 'configs']
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 14) gzip',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
     }
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(f"ytsearch20:{query}", download=False)
@@ -239,9 +249,21 @@ async def download_and_send(url, context, status_msg, chat_id):
                 'no_warnings': True,
                 'noplaylist': True,
                 'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
-                'socket_timeout': 30,
+                'socket_timeout': 60,
                 'retries': 10,
-                'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}},
+                'fragment_retries': 10,
+                'extractor_retries': 3,
+                'file_access_retries': 3,
+                'http_headers': {
+                    'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 14) gzip',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'ios', 'mweb', 'web_safari', 'tv_embedded'],
+                        'player_skip': ['webpage', 'configs'],
+                    }
+                },
             }
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -566,7 +588,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("😔 Avval musiqa yuboring, keyin video bosing!")
             return
         status = await context.bot.send_message(chat_id=chat_id, text="📹 <b>Video yuklanmoqda...</b> 🎬", parse_mode='HTML')
-        ydl_opts = {'format': 'bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b','outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),'quiet': True,'noplaylist': True,'merge_output_format': 'mp4','cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}}}
+        ydl_opts = {
+            'format': 'bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b',
+            'outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),
+            'quiet': True,
+            'noplaylist': True,
+            'merge_output_format': 'mp4',
+            'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+            'socket_timeout': 60,
+            'retries': 10,
+            'fragment_retries': 10,
+            'extractor_retries': 3,
+            'http_headers': {
+                'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 14) gzip',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios', 'mweb', 'web_safari', 'tv_embedded'],
+                    'player_skip': ['webpage', 'configs'],
+                }
+            }
+        }
         try:
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -592,7 +635,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_eff = await context.bot.send_message(chat_id=chat_id, text=f"✨ Effekt qilinmoqda...", parse_mode='HTML')
         tmp_path = None; eff_path = None
         try:
-            ydl_opts = {'format': 'bestaudio[ext=m4a]/bestaudio/best','outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),'quiet': True,'noplaylist': True,'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,'extractor_args': {'youtube': {'player_client': ['android_music', 'android', 'ios'], 'player_skip': ['webpage']}}}
+            ydl_opts = {
+                'format': 'bestaudio[ext=m4a]/bestaudio/best',
+                'outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),
+                'quiet': True,
+                'noplaylist': True,
+                'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+                'socket_timeout': 60,
+                'retries': 10,
+                'fragment_retries': 10,
+                'extractor_retries': 3,
+                'http_headers': {
+                    'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 14) gzip',
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'ios', 'mweb', 'web_safari', 'tv_embedded'],
+                        'player_skip': ['webpage', 'configs'],
+                    }
+                }
+            }
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True); vid = info['id']
                 for f in os.listdir(DOWNLOAD_DIR):
@@ -624,7 +686,7 @@ def build_admin_message(admin_text):
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id!= config.ADMIN_ID:
-        await query.message.reply_text("⛔ Siz admin emassiz!")
+        await update.message.reply_text("⛔ Siz admin emassiz!")
         return
 
     if update.message.reply_to_message:
