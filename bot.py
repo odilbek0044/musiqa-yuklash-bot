@@ -181,17 +181,16 @@ async def download_and_send(url, context, status_msg, chat_id):
 
     # ANIMATSIYA - 4 ta xabar 2 sekundda almashadi
     steps = [
-        "🔍 <b>Musiqa tekshirilmoqda...</b> 🎧",
-        "✅ <b>So'rov qabul qilindi...</b> 📩",
-        "🎵 <b>Musiqangiz qidirilmoqda...</b> ⚡",
-        "🚀 <b>Natija tayyorlanmoqda...</b> ✨"
+       "✅ <b>So'rov qabul qilindi...</b> 📩",
+        "🔍 <b>Musiqa qidirilmoqda...</b> 🎧",
+
     ]
     for txt in steps:
         try:
             await status_msg.edit_text(txt, parse_mode='HTML')
         except:
             pass
-        await asyncio.sleep(3)
+        await asyncio.sleep(1)
     formats_to_try = [
         'bestaudio/best',
         'best',
