@@ -10,7 +10,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only --no-cache -a musiqa-yuklash-bot
+      - run: flyctl deploy --remote-only -a musiqa-yuklash-bot --no-cache --yes
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      - run: flyctl deploy --remote-only --no-cache -a musiqa-yuklash-bot --yes
