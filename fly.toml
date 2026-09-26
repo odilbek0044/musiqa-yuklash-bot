@@ -11,5 +11,5 @@ primary_region = 'fra'
   min_machines_running = 1
   processes = ['app']
 [mounts]
-  source = "data"
+  source = "users_data"
   destination = "/data"
