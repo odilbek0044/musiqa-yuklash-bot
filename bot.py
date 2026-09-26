@@ -16,7 +16,7 @@ START_TEXT = """
 ━━━━━━━━━━━━━━━━━━━━━━
 Salom, <b>{user}!</b> 👋
 🎬 <b>Video yuklayman MP4 da</b> 📺 YouTube, 📸 Instagram
-🎵 <b>Va avtomatik MP3 ham!</b>
+🎵 <b>Va avtomatik videoyingizni MP3 qilib beraman!</b>
 🎤 <b>Golos / Video yuboring</b> 🔍 Shazam orqali topaman!
 🏆 /top - TOP 20 trend
 """
