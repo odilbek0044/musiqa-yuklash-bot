@@ -1,10 +1,9 @@
-import os, logging, subprocess, datetime, asyncio, html, re, requests
+import os, logging, subprocess, datetime, asyncio, html, re, requests, json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, InlineQueryHandler
 from yt_dlp import YoutubeDL
 from shazamio import Shazam
 import config
-
 
 logging.basicConfig(level=logging.INFO)
 DOWNLOAD_DIR = "/data/downloads"
@@ -35,6 +34,7 @@ Men siz uchun:
    <code>Alan Walker - Alone</code>
 3⃣ 🎤 Golos yoki video yuboring!
 🏆 /top - Eng ko'p yuklangan musiqalarni TOP 20 taligini tinglang🎧
+
 Men darhol sizga <b>VIDEO + AUDIO</b> ni yuboraman! 🚀
 """
 
@@ -48,8 +48,8 @@ ABOUT_TEXT = """
 
 💡 <b>Bu bot nima qiladi?</b>
 YouTube, Instagram dan
-video va musiqalarni tez yuklab beradi va audiosini kesib MP3 formatda beradi!
-🎤 Golos yuborsangiz Shazam orqali topib beradi!
+video va musiqalarni tez yuklab beraman va audiosini kesib MP3 formatda beraman!
+🎤 Golos yuborsangiz Shazam orqali musiqangizni topib beraman!
 ✨ Sifati zo'r va juda tez!
 
 Barcha huquqlar himoyalangan © 2025 🛡
@@ -76,12 +76,59 @@ def main_keyboard():
 def is_url(text):
     return text.startswith("http://") or text.startswith("https://")
 
-def search_youtube(query):
-    ydl_opts = {
+def is_instagram_url(url):
+    return "instagram.com" in url or "instagr.am" in url
+
+def is_youtube_url(url):
+    return "youtube.com" in url or "youtu.be" in url
+
+def get_ydl_opts_for_search():
+    # Qidiruv uchun - cookie bilan, android+ios
+    return {
         'quiet': True, 'no_warnings': True, 'extract_flat': True,
-        'cookiefile': 'cookies.txt',
+        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
         'extractor_args': {'youtube': {'player_client': ['android', 'ios'], 'player_skip': ['webpage']}}
     }
+
+def get_ydl_opts(url, audio_only=True):
+    # YouTube umrbod - cookiesiz, 4 client bilan (android, ios, mweb, tv) - hamma qurilmada ishlaydi
+    # Instagram - cookie bilan 2-3 kunlik
+    base = {
+        'quiet': True, 'no_warnings': True, 'noplaylist': True,
+        'outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),
+        'socket_timeout': 30, 'retries': 10,
+    }
+    if is_youtube_url(url):
+        base.update({
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios', 'mweb', 'tv'],
+                    'player_skip': ['webpage', 'configs']
+                }
+            }
+        })
+        # YouTube uchun cookie ishlatma - umrbod
+        if os.path.exists('cookies.txt'):
+            # cookie faylni ataylab bermaymiz youtube uchun
+            pass
+    else:
+        # Instagram va boshqalar uchun cookie
+        if os.path.exists('cookies.txt'):
+            base['cookiefile'] = 'cookies.txt'
+        base['extractor_args'] = {'youtube': {'player_client': ['android', 'ios'], 'player_skip': ['webpage']}}
+
+    if audio_only:
+        base['format'] = 'bestaudio/best'
+    else:
+        base['format'] = 'bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b'
+        base['merge_output_format'] = 'mp4'
+    return base
+
+def search_youtube(query):
+    ydl_opts = get_ydl_opts_for_search()
+    # None bo'lgan cookiefile ni olib tashla
+    if ydl_opts.get('cookiefile') is None:
+        ydl_opts.pop('cookiefile', None)
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(f"ytsearch20:{query}", download=False)
         return info.get('entries', [])[:20]
@@ -117,7 +164,7 @@ def build_search_keyboard(results, page):
         keyboard.append(row)
     nav_row = []
     if page > 0:
-        nav_row.append(InlineKeyboardButton("❤️ Avvalgisi", callback_data=f"search_page_{page-1}"))
+        nav_row.append(InlineKeyboardButton("❤ Avvalgisi", callback_data=f"search_page_{page-1}"))
     if page < total_pages - 1:
         nav_row.append(InlineKeyboardButton("🩷 Keyingisi", callback_data=f"search_page_{page+1}"))
     if nav_row:
@@ -149,11 +196,30 @@ def get_lyrics(title):
         logging.error(f"Lyrics xato: {e}")
     return None
 
-def build_after_audio_keyboard():
+# --- YANGI KEYBOARDLAR ---
+
+def build_user_video_keyboard(file_id):
+    # User video yuborganda: swipe orqali javob yozish funksiyasi
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎤 So'zlari", callback_data="lyrics_yes"), InlineKeyboardButton("📹 Video", callback_data="want_video_yes")],
-        [InlineKeyboardButton("🐢 Slowed + Reverb", callback_data="effect_slowed"), InlineKeyboardButton("🔊 Bass Boosted", callback_data="effect_bass")],
-        [InlineKeyboardButton("🎤 Karaoke kuylamoqchimisiz?", callback_data="effect_karaoke")],
+        [InlineKeyboardButton("🎧 Audiosini ajratish", callback_data=f"uv_cut_{file_id}"),
+         InlineKeyboardButton("🔍 Musiqani qidirish", callback_data=f"uv_shazam_{file_id}")],
+        [InlineKeyboardButton("❌ Bekor qilish", callback_data=f"uv_cancel_{file_id}")]
+    ])
+
+def build_link_video_keyboard(video_id):
+    # Instagram/Youtube link uchun: MP4 tagida chiqadigan 3 tugma
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔍 Musiqani qidirish", callback_data=f"lv_search_{video_id}")],
+        [InlineKeyboardButton("✂ Audioni qirqish", callback_data=f"lv_cut_{video_id}")],
+        [InlineKeyboardButton("❌ Kerak emas", callback_data=f"lv_no_{video_id}")]
+    ])
+
+def build_after_audio_keyboard():
+    # MP3 tagida chiqadigan 5 tugma - sen aytgan tartibda
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎤 Musiqa so'zlari", callback_data="lyrics_yes"), InlineKeyboardButton("📹 Video", callback_data="want_video_yes")],
+        [InlineKeyboardButton("🐢 Slowed version", callback_data="effect_slowed"), InlineKeyboardButton("🔊 Bass boosted", callback_data="effect_bass")],
+        [InlineKeyboardButton("🎤 Karaoke kuylash", callback_data="effect_karaoke")],
         [InlineKeyboardButton("❌ Kerak emas", callback_data="cancel_inline")]
     ])
 
@@ -165,7 +231,6 @@ def apply_audio_effect(input_path, effect_type):
         elif effect_type == "bass":
             filt = "bass=g=12:f=110:w=0.6,equalizer=f=60:width_type=o:width=1.5:g=8"
         elif effect_type == "karaoke":
-            # MINUS / KARAOKE - o'rtadagi vokalni o'chirish (center cancel)
             filt = "pan=mono|c0=c0-c1,pan=stereo|c0=c0|c1=c0"
         else:
             return None
@@ -178,12 +243,10 @@ def apply_audio_effect(input_path, effect_type):
 async def download_and_send(url, context, status_msg, chat_id):
     url = clean_url(url)
     audio_path = None
-
-    # ANIMATSIYA - 4 ta xabar 2 sekundda almashadi
     steps = [
-       "✅ <b>So'rov qabul qilindi...</b> 📩",
-        "🔍 <b>Musiqa qidirilmoqda...</b> 🎧",
-
+       "✅ <b>So'rov qabul qilindi...</b>",
+       "🔍 <b>Musiqa qidirilmoqda...</b>",
+       "🩷 <b>Natija yuklanmoqda...<b>",
     ]
     for txt in steps:
         try:
@@ -191,21 +254,12 @@ async def download_and_send(url, context, status_msg, chat_id):
         except:
             pass
         await asyncio.sleep(1)
-    formats_to_try = [
-        'bestaudio/best',
-        'best',
-    ]
+    formats_to_try = ['bestaudio/best', 'best']
     for fmt in formats_to_try:
         try:
             await status_msg.edit_text("🎧 <b>Audio yuklanmoqda...</b> ⚡", parse_mode='HTML')
-            ydl_opts = {
-                'format': fmt,
-                'outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),
-                'quiet': True, 'no_warnings': True, 'noplaylist': True,
-                'cookiefile': 'cookies.txt',
-                'socket_timeout': 30, 'retries': 10,
-                'extractor_args': {'youtube': {'player_client': ['android', 'ios'], 'player_skip': ['webpage']}},
-            }
+            ydl_opts = get_ydl_opts(url, audio_only=True)
+            ydl_opts['format'] = fmt
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 video_id = info['id']
@@ -219,7 +273,7 @@ async def download_and_send(url, context, status_msg, chat_id):
             if not audio_path or not os.path.exists(audio_path):
                 continue
             mins, secs = divmod(int(duration), 60)
-            cap_a = f"🎵 <b>{safe_title}</b>"  # FAQAT NOMI, boshqa text yo'q!
+            cap_a = f"🎵 <b>{safe_title}</b>"
             cap_v = f"🎵 <b>{safe_title}</b>"
             final_path = audio_path
             if not audio_path.lower().endswith('.mp3'):
@@ -231,7 +285,6 @@ async def download_and_send(url, context, status_msg, chat_id):
                         except: pass
                         final_path = mp3_tmp
                 except: pass
-            # TO'G'RI VARIANT - final_path va to'liq tugmalar bilan
             msg = await context.bot.send_audio(
                 chat_id=chat_id,
                 audio=open(final_path, 'rb'),
@@ -273,93 +326,103 @@ async def download_and_send(url, context, status_msg, chat_id):
     except: pass
     return None, None, None, url
 
+async def download_and_send_video(url, context, status_msg, chat_id):
+    # YANGI FUNKSIYA: Instagram/YouTube link uchun MP4 yuklab 3 tugma bilan yuborish
+    url = clean_url(url)
+    try:
+        await status_msg.edit_text("✅ <b>So'rov qabul qilindi...</b>", parse_mode='HTML')
+        await asyncio.sleep(0.5)
+        await status_msg.edit_text("📹 <b>Video yuklanmoqda...</b> 🎬✨", parse_mode='HTML')
+        ydl_opts = get_ydl_opts(url, audio_only=False)
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            video_id = info['id']
+            title = info.get('title','Video')[:60]
+            video_path = None
+            for f in os.listdir(DOWNLOAD_DIR):
+                if f.startswith(video_id) and f.endswith(('.mp4','.mkv','.webm')):
+                    video_path = os.path.join(DOWNLOAD_DIR, f)
+                    break
+            if not video_path or not os.path.exists(video_path):
+                # ba'zan id bilan emas boshqa nom bilan tushadi
+                for f in os.listdir(DOWNLOAD_DIR):
+                    if video_id in f and f.endswith(('.mp4','.mkv','.webm')):
+                        video_path = os.path.join(DOWNLOAD_DIR, f)
+                        break
+            if not video_path:
+                raise Exception("Video topilmadi")
+
+            # Videoni yuboramiz 3 tugma bilan
+            await context.bot.send_video(
+                chat_id=chat_id,
+                video=open(video_path, 'rb'),
+                caption=f"🎬 <b>{html.escape(title)}</b>",
+                parse_mode='HTML',
+                reply_markup=build_link_video_keyboard(video_id)
+            )
+            # context da saqlab qo'yamiz keyinchalik kesish/qidirish uchun
+            context.user_data[f'video_path_{video_id}'] = video_path
+            context.user_data[f'video_title_{video_id}'] = title
+            context.user_data[f'video_url_{video_id}'] = url
+
+            # status ni o'chiramiz, videoni saqlab qolamiz (keyin tugma bosilganda o'chiramiz)
+            try: await status_msg.delete()
+            except: pass
+            try:
+                with open(TOP_FILE, "a", encoding="utf-8") as tf:
+                    tf.write(f"{title}\n")
+            except: pass
+            return True
+    except Exception as e:
+        logging.error(f"Video download xato: {e}")
+        try:
+            await status_msg.edit_text(f"❌ <b>Video yuklanmadi:</b> {html.escape(str(e)[:100])} 😔", parse_mode='HTML')
+            await asyncio.sleep(4)
+            await status_msg.delete()
+        except: pass
+        return False
+
 async def handle_voice_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status = await update.message.reply_text("🎧 <b>Eshitib ko'ryapman...</b> 👂✨\n🔍 <b>Musiqa qidirilmoqda...</b> 🎵", parse_mode='HTML')
+    # User video/golos yuborganda tahrirlash taklifi
+    user_file = None
     file_path = None
-    mp3_path = None
-    wav_path = None
     try:
         if update.message.voice:
-            file = await update.message.voice.get_file()
-            file_path = os.path.join(DOWNLOAD_DIR, f"voice_{file.file_id}.ogg")
+            user_file = await update.message.voice.get_file()
+            file_path = os.path.join(DOWNLOAD_DIR, f"voice_{user_file.file_id}.ogg")
         elif update.message.video:
-            file = await update.message.video.get_file()
-            file_path = os.path.join(DOWNLOAD_DIR, f"video_{file.file_id}.mp4")
+            user_file = await update.message.video.get_file()
+            file_path = os.path.join(DOWNLOAD_DIR, f"video_{user_file.file_id}.mp4")
         elif update.message.video_note:
-            file = await update.message.video_note.get_file()
-            file_path = os.path.join(DOWNLOAD_DIR, f"note_{file.file_id}.mp4")
+            user_file = await update.message.video_note.get_file()
+            file_path = os.path.join(DOWNLOAD_DIR, f"note_{user_file.file_id}.mp4")
         elif update.message.audio:
-            file = await update.message.audio.get_file()
-            file_path = os.path.join(DOWNLOAD_DIR, f"audio_{file.file_id}.mp3")
+            user_file = await update.message.audio.get_file()
+            file_path = os.path.join(DOWNLOAD_DIR, f"audio_{user_file.file_id}.mp3")
+        elif update.message.document and update.message.document.mime_type and 'video' in update.message.document.mime_type:
+            user_file = await update.message.document.get_file()
+            file_path = os.path.join(DOWNLOAD_DIR, f"doc_{user_file.file_id}.mp4")
         else:
             return
-        await file.download_to_drive(file_path)
 
-        # 1-QADAM: Videodan ovozni KESIB OLAMIZ (har doim!)
-        await status.edit_text("✂ <b>Videodan ovoz ajratilmoqda...</b> 🎬➡🎧", parse_mode='HTML')
-        mp3_path = file_path.rsplit('.', 1)[0] + "_cut.mp3"
-        try:
-            subprocess.run(['ffmpeg','-y','-i',file_path,'-vn','-ar','44100','-ac','2','-q:a','0',mp3_path],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
-        except Exception as e:
-            logging.error(f"ffmpeg cut xato: {e}")
+        await user_file.download_to_drive(file_path)
 
-        # Agar ovoz ajratilgan bo'lsa darhol userga beramiz!
-        audio_ready = False
-        if mp3_path and os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 2000:
-            audio_ready = True
-            await update.message.reply_audio(audio=open(mp3_path,'rb'), caption="🎧 <b>Ovozi ajratib olindi!</b> ✨\n🔍 <b>Endi musiqa qidirilmoqda...</b> 🎵", parse_mode='HTML')
+        # Swipe orqali javob yozish funksiyasi uchun - chiroyli habar
+        file_id_short = user_file.file_id[:20]
+        context.user_data[f'user_video_path_{file_id_short}'] = file_path
 
-        # 2-QADAM: Shazam uchun tayyorlaymiz - kesilgan audiodan foydalanamiz!
-        await status.edit_text("🔍 <b>Musiqa qidirilmoqda...</b> 🎵✨", parse_mode='HTML')
-        shazam_input = mp3_path if audio_ready else file_path
-        wav_path = file_path.rsplit('.', 1)[0] + "_shazam.mp3"
-        try:
-            # O'rtadan 15 sekund kesamiz - boshida musiqa bo'lmasligi mumkin!
-            subprocess.run(['ffmpeg','-y','-i',shazam_input,'-ss','2','-t','12','-ar','44100','-ac','2',wav_path],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
-        except Exception as e:
-            logging.error(f"ffmpeg shazam cut xato: {e}")
-            wav_path = shazam_input
-
-        shazam = Shazam()
-        out = None
-        if os.path.exists(wav_path):
-            try:
-                out = await shazam.recognize(wav_path)
-            except Exception as e:
-                logging.error(f"Shazam xato: {e}")
-
-        if out and out.get('track'):
-            track = out['track']
-            title = track.get('title','Noma\'lum')
-            artist = track.get('subtitle','Noma\'lum')
-            full_name = f"{artist} - {title}"
-            await status.edit_text(f"🎉 <b>Topildi🥳</b>\n🎤 <b>{html.escape(artist)}</b>\n🎵 <b>{html.escape(title)}</b>\n\n📥 <b>Yuklanmoqda...</b> 🚀", parse_mode='HTML')
-            results = search_youtube(full_name)
-            if results:
-                url = f"https://www.youtube.com/watch?v={results[0]['id']}"
-                ok, cap_v, t, video_url = await download_and_send(url, context, status, update.effective_chat.id)
-                if ok:
-                    context.user_data['pending_video_url'] = video_url
-                    context.user_data['pending_video_caption'] = cap_v
-                    context.user_data['pending_video_title'] = title
-
-        # Shazam topa olmasa ham audioni saqlab qolamiz!
-        if audio_ready:
-            await status.edit_text("✅ <b>Ovoz ajratib olindi!</b> 🎧\n😔 <b>Shazam topa olmadi, qo'shiq nomini yozib yuboring!</b> 🔍", parse_mode='HTML', reply_markup=main_keyboard())
-        else:
-            await status.edit_text("😔 <b>Musiqa topilmadi va ovoz ham ajratilmadi...</b> 🎵\n🔊 Videoda ovoz borligiga ishonch hosil qiling!", parse_mode='HTML', reply_markup=main_keyboard())
+        text = (
+            "🎬 <b>Videoyingizni tahrirlaymizmi?</b> ✨\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "🎧 Audiosini ajratib MP3 qilaymi?\n"
+            "🔍 Ichidagi musiqani topib beraymi?\n"
+            "👇 Tanlang!"
+        )
+        await update.message.reply_text(text, parse_mode='HTML', reply_markup=build_user_video_keyboard(file_id_short))
 
     except Exception as e:
-        logging.error(f"Shazam umumiy xato: {e}")
-        await status.edit_text("😔 <b>Topilmadi, qayta urinib ko'ring!</b>", parse_mode='HTML', reply_markup=main_keyboard())
-    finally:
-        try:
-            if file_path and os.path.exists(file_path): os.remove(file_path)
-            if mp3_path and os.path.exists(mp3_path): os.remove(mp3_path)
-            if wav_path and os.path.exists(wav_path) and wav_path!= mp3_path and wav_path!= file_path: os.remove(wav_path)
-        except: pass
+        logging.error(f"handle_voice_video xato: {e}")
+        await update.message.reply_text("😔 <b>Xatolik yuz berdi, qayta yuboring!</b>", parse_mode='HTML')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -383,7 +446,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode='HTML', reply_markup=main_keyboard())
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # === 1. USER ADMINDAN KELGAN XABARGA JAVOB YOZAYOTGAN BO'LSA ===
     if context.user_data.get('awaiting_admin_reply'):
         user = update.effective_user
         user_text = update.message.text
@@ -410,7 +472,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['awaiting_admin_reply'] = False
         return
 
-    # === 2. ADMIN USERGA JAVOB YOZAYOTGAN BO'LSA ===
     if context.user_data.get('awaiting_admin_to_user'):
         target_id = context.user_data['awaiting_admin_to_user']
         text, kb = build_admin_message(update.message.text)
@@ -435,12 +496,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if "tiktok.com" in txt:
             await update.message.reply_text("🚫 <b>TikTok o'chirilgan!</b>", parse_mode='HTML', reply_markup=main_keyboard())
             return
-        status = await update.message.reply_text("⏳ <b>Boshlanmoqda...</b> ✨", parse_mode='HTML')
-        ok, cap_v, title, video_url = await download_and_send(txt, context, status, update.effective_chat.id)
-        if ok:
-            context.user_data['pending_video_url'] = video_url
-            context.user_data['pending_video_caption'] = cap_v
-            context.user_data['pending_video_title'] = title
+        # Linkni o'chirishga harakat qilamiz
+        try:
+            await update.message.delete()
+        except:
+            pass
+        status = await context.bot.send_message(chat_id=update.effective_chat.id, text="⏳ <b>Boshlanmoqda...</b> ✨", parse_mode='HTML')
+        # Instagram/Youtube link bo'lsa video qilib yuboramiz
+        if is_instagram_url(txt) or is_youtube_url(txt):
+            ok = await download_and_send_video(txt, context, status, update.effective_chat.id)
+            if not ok:
+                # Video bo'lmasa audio qilib ko'ramiz
+                await download_and_send(txt, context, status, update.effective_chat.id)
+        else:
+            ok, cap_v, title, video_url = await download_and_send(txt, context, status, update.effective_chat.id)
+            if ok:
+                context.user_data['pending_video_url'] = video_url
+                context.user_data['pending_video_caption'] = cap_v
+                context.user_data['pending_video_title'] = title
     else:
         status = await update.message.reply_text(f"🔍 <b>\"{html.escape(txt)}\" qidirilmoqda...</b> 🎵✨", parse_mode='HTML')
         results = search_youtube(txt)
@@ -459,7 +532,6 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     q = update.inline_query.query.strip()
     if not q or len(q) < 2:
         return
-
     try:
         results = search_youtube(q)
         articles = []
@@ -468,7 +540,6 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             title = r.get('title', 'Noma\'lum')[:60]
             url = f"https://www.youtube.com/watch?v={vid}"
             channel = r.get('uploader', 'YouTube')
-
             articles.append(
                 InlineQueryResultArticle(
                     id=vid,
@@ -488,10 +559,192 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         logging.error(f"Inline xato: {e}")
 
+async def handle_user_video_buttons(query, context, file_id_short):
+    chat_id = query.message.chat.id
+    path = context.user_data.get(f'user_video_path_{file_id_short}')
+    if not path or not os.path.exists(path):
+        await context.bot.send_message(chat_id=chat_id, text="😔 <b>Fayl topilmadi, videoni qayta yuboring!</b>", parse_mode='HTML')
+        return
+
+    data = query.data
+
+    # Xabarni avtomatik o'chirish - har 3 tugma uchun
+    try:
+        await query.message.delete()
+    except:
+        pass
+
+    if f"uv_cut_{file_id_short}" in data:
+        # Audioni qirqish - tez MP3
+        status = await context.bot.send_message(chat_id=chat_id, text="✂ <b>Audiosi ajratilmoqda...</b> ⚡", parse_mode='HTML')
+        try:
+            mp3_path = path.rsplit('.',1)[0] + "_cut.mp3"
+            subprocess.run(['ffmpeg','-y','-i',path,'-vn','-ar','44100','-ac','2','-q:a','0',mp3_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+            if os.path.exists(mp3_path):
+                await context.bot.send_audio(chat_id=chat_id, audio=open(mp3_path,'rb'), caption="🎧 <b>Ovozi ajratib olindi!</b> ✨", parse_mode='HTML', reply_markup=build_after_audio_keyboard())
+                try: os.remove(mp3_path)
+                except: pass
+            await status.delete()
+        except Exception as e:
+            logging.error(e)
+            try: await status.edit_text("❌ <b>Ajratib bo'lmadi!</b>", parse_mode='HTML')
+            except: pass
+
+    elif f"uv_shazam_{file_id_short}" in data:
+        # Shazam orqali qidirish
+        status = await context.bot.send_message(chat_id=chat_id, text="🎧 <b>Eshitib ko'ryapman...</b> 👂✨\n🔍 <b>Musiqa qidirilmoqda...</b> 🎵", parse_mode='HTML')
+        wav_path = None
+        try:
+            wav_path = path.rsplit('.',1)[0] + "_shazam.mp3"
+            subprocess.run(['ffmpeg','-y','-i',path,'-ss','2','-t','12','-ar','44100','-ac','2',wav_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+            shazam = Shazam()
+            out = None
+            if os.path.exists(wav_path):
+                try:
+                    out = await shazam.recognize(wav_path)
+                except Exception as e:
+                    logging.error(f"Shazam xato: {e}")
+            if out and out.get('track'):
+                track = out['track']
+                title = track.get('title','Noma\'lum')
+                artist = track.get('subtitle','Noma\'lum')
+                full_name = f"{artist} - {title}"
+                await status.edit_text(f"🎉 <b>Topildi🥳</b>\n🎤 <b>{html.escape(artist)}</b>\n🎵 <b>{html.escape(title)}</b>\n\n📥 <b>Yuklanmoqda...</b> 🚀", parse_mode='HTML')
+                results = search_youtube(full_name)
+                if results:
+                    url = f"https://www.youtube.com/watch?v={results[0]['id']}"
+                    ok, cap_v, t, video_url = await download_and_send(url, context, status, chat_id)
+                    if ok:
+                        context.user_data['pending_video_url'] = video_url
+                        context.user_data['pending_video_caption'] = cap_v
+                        context.user_data['pending_video_title'] = t
+                        return
+            await status.edit_text("😔 <b>Musiqa tanilmadi!</b> 🎵\n🔊 Videoda musiqa borligiga ishonch hosil qiling!", parse_mode='HTML', reply_markup=main_keyboard())
+        except Exception as e:
+            logging.error(e)
+            await status.edit_text("😔 <b>Musiqa tanilmadi!</b>", parse_mode='HTML')
+        finally:
+            if wav_path and os.path.exists(wav_path):
+                try: os.remove(wav_path)
+                except: pass
+    elif f"uv_cancel_{file_id_short}" in data:
+        # Bekor qilish - xabar allaqachon o'chdi
+        pass
+
+async def handle_link_video_buttons(query, context, video_id):
+    chat_id = query.message.chat.id
+    data = query.data
+    path = context.user_data.get(f'video_path_{video_id}')
+    title = context.user_data.get(f'video_title_{video_id}', 'Video')
+    url = context.user_data.get(f'video_url_{video_id}')
+
+    # Tugma bosilganda xabar o'chadi va funksiya ishlaydi - har 3 uchun
+    if data == f"lv_no_{video_id}":
+        # Kerak emas - inline tugma o'chib ketadi va video qoladi
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except:
+            pass
+        return
+
+    # Qolgan 2 tugma uchun videoni saqlab qolamiz, lekin tugmalar o'chadi
+    try:
+        await query.edit_message_reply_markup(reply_markup=None)
+    except:
+        pass
+
+    if data == f"lv_cut_{video_id}":
+        # Audioni qirqish MP3
+        if not path or not os.path.exists(path):
+            # Qayta yuklab olish
+            if url:
+                status = await context.bot.send_message(chat_id=chat_id, text="✂ <b>Audiosi qirqilmoqda...</b> ⚡", parse_mode='HTML')
+                await download_and_send(url, context, status, chat_id)
+                return
+        status = await context.bot.send_message(chat_id=chat_id, text="✂ <b>Audiosi qirqilmoqda...</b> ⚡", parse_mode='HTML')
+        try:
+            mp3_path = path.rsplit('.',1)[0] + "_cut.mp3"
+            subprocess.run(['ffmpeg','-y','-i',path,'-vn','-ar','44100','-ac','2','-q:a','0',mp3_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+            if os.path.exists(mp3_path):
+                await context.bot.send_audio(chat_id=chat_id, audio=open(mp3_path,'rb'), caption=f"🎧 <b>{html.escape(title)}</b> ✨", parse_mode='HTML', reply_markup=build_after_audio_keyboard())
+                context.user_data['pending_video_url'] = url
+                context.user_data['pending_video_title'] = title
+                try: os.remove(mp3_path)
+                except: pass
+            try: await status.delete()
+            except: pass
+        except Exception as e:
+            logging.error(e)
+
+    elif data == f"lv_search_{video_id}":
+        # Videodagi musiqani Shazam orqali qidirish
+        if not path or not os.path.exists(path):
+            await context.bot.send_message(chat_id=chat_id, text="😔 <b>Video fayli topilmadi!</b>", parse_mode='HTML')
+            return
+        status = await context.bot.send_message(chat_id=chat_id, text="🔍 <b>Videodagi musiqa qidirilmoqda...</b> 🎵✨", parse_mode='HTML')
+        wav_path = None
+        try:
+            wav_path = path.rsplit('.',1)[0] + "_shazam.mp3"
+            subprocess.run(['ffmpeg','-y','-i',path,'-ss','2','-t','12','-ar','44100','-ac','2',wav_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+            shazam = Shazam()
+            out = None
+            if os.path.exists(wav_path):
+                out = await shazam.recognize(wav_path)
+            if out and out.get('track'):
+                track = out['track']
+                t_title = track.get('title','Noma\'lum')
+                artist = track.get('subtitle','Noma\'lum')
+                full_name = f"{artist} - {t_title}"
+                await status.edit_text(f"🎉 <b>Topildi🥳</b>\n🎤 <b>{html.escape(artist)}</b>\n🎵 <b>{html.escape(t_title)}</b>", parse_mode='HTML')
+                results = search_youtube(full_name)
+                if results:
+                    url2 = f"https://www.youtube.com/watch?v={results[0]['id']}"
+                    ok, cap_v, t, video_url = await download_and_send(url2, context, status, chat_id)
+                    if ok:
+                        context.user_data['pending_video_url'] = video_url
+                        context.user_data['pending_video_title'] = t
+            else:
+                await status.edit_text("😔 <b>Musiqa topilmadi!</b> 🎵", parse_mode='HTML')
+        except Exception as e:
+            logging.error(e)
+            await status.edit_text("😔 <b>Musiqa topilmadi!</b>", parse_mode='HTML')
+        finally:
+            if wav_path and os.path.exists(wav_path):
+                try: os.remove(wav_path)
+                except: pass
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     chat_id = query.message.chat.id
+
+    # User video tugmalari
+    if query.data.startswith("uv_"):
+        file_id_short = query.data.split("_")[-1]
+        await handle_user_video_buttons(query, context, file_id_short)
+        return
+
+    # Link video tugmalari
+    if query.data.startswith("lv_"):
+        # video_id ni ajratib olamiz
+        try:
+            video_id = query.data.split("_")[-1]
+            # lv_search_VID, lv_cut_VID, lv_no_VID
+            # video_id da _ bo'lishi mumkin, shuning uchun
+            parts = query.data.split("_")
+            # lv + type + video_id
+            video_id = "_".join(parts[2:])
+            # lekin no uchun
+            if query.data.startswith("lv_search_"):
+                video_id = query.data.replace("lv_search_", "")
+            elif query.data.startswith("lv_cut_"):
+                video_id = query.data.replace("lv_cut_", "")
+            elif query.data.startswith("lv_no_"):
+                video_id = query.data.replace("lv_no_", "")
+            await handle_link_video_buttons(query, context, video_id)
+        except Exception as e:
+            logging.error(f"lv button xato: {e}")
+        return
 
     if query.data == "reply_to_admin":
         prompt_msg = await query.message.reply_text("✍ <b>Javobingizni yozing:</b>\nAdmin sizga javob beradi!", parse_mode='HTML')
@@ -527,7 +780,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not results: return
             context.user_data['top_page'] = page
             text, _ = build_search_text("🔥 TOP 20 - Trend", results, page)
-            # TOP uchun keyboard
             total_pages = (len(results) + PER_PAGE - 1) // PER_PAGE
             start = page * PER_PAGE
             end = start + PER_PAGE
@@ -553,7 +805,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
         except: pass
         return
-   
    
     if query.data == "about":
         await context.bot.send_message(chat_id=chat_id, text=ABOUT_TEXT, parse_mode='HTML', reply_markup=main_keyboard())
@@ -592,7 +843,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         url = context.user_data.get('pending_video_url')
         if url:
             status = await context.bot.send_message(chat_id=chat_id, text="📹 <b>Video yuklanmoqda...</b> 🎬", parse_mode='HTML')
-            ydl_opts = {'format': 'bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b','outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),'quiet': True,'noplaylist': True,'merge_output_format': 'mp4','cookiefile': 'cookies.txt','extractor_args': {'youtube': {'player_client': ['android', 'ios'], 'player_skip': ['webpage']}},}
+            ydl_opts = get_ydl_opts(url, audio_only=False)
             try:
                 with YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=True); video_id = info['id']; video_path = None
@@ -610,26 +861,29 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data.startswith("effect_"):
         effect = query.data.split("_")[1]
         title = context.user_data.get('pending_video_title', 'Audio'); url = context.user_data.get('pending_video_url')
-        if not url: await context.bot.send_message(chat_id=chat_id, text="😔 <b>Asl musiqa topilmadi!</b>", parse_mode='HTML'); return
-        status_eff = await context.bot.send_message(chat_id=chat_id, text=f"✨ Effekt qilinmoqda...", parse_mode='HTML')
+        if not url: 
+            # Agar URL yo'q bo'lsa, top olingan videodan ham qidiramiz
+            await context.bot.send_message(chat_id=chat_id, text="😔 <b>Asl musiqa topilmadi! Iltimos qayta yuklang!</b>", parse_mode='HTML')
+            return
+        status_eff = await context.bot.send_message(chat_id=chat_id, text=f"✨ <b>{effect} effekti qilinmoqda...</b> 🎧", parse_mode='HTML')
         tmp_path = None; eff_path = None
         try:
-            ydl_opts = {'format': 'bestaudio/best','outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),'quiet': True,'noplaylist': True,'cookiefile': 'cookies.txt','extractor_args': {'youtube': {'player_client': ['android', 'ios'], 'player_skip': ['webpage']}},}
+            ydl_opts = get_ydl_opts(url, audio_only=True)
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True); vid = info['id']
                 for f in os.listdir(DOWNLOAD_DIR):
                     if f.startswith(vid): tmp_path = os.path.join(DOWNLOAD_DIR, f); break
             if tmp_path:
                 eff_path = apply_audio_effect(tmp_path, effect)
-                if eff_path: await context.bot.send_audio(chat_id=chat_id, audio=open(eff_path,'rb'), title=f"{title} ({effect})", caption=f"🎵 <b>{html.escape(title)}</b>", parse_mode='HTML', reply_markup=build_after_audio_keyboard())
+                if eff_path: 
+                    cap = f"🎧 <b>{html.escape(title)}</b> - {effect} ✨"
+                    await context.bot.send_audio(chat_id=chat_id, audio=open(eff_path,'rb'), title=f"{title} ({effect})", caption=cap, parse_mode='HTML', reply_markup=build_after_audio_keyboard())
         finally:
             try: await status_eff.delete()
             except: pass
             if tmp_path and os.path.exists(tmp_path): os.remove(tmp_path)
             if eff_path and os.path.exists(eff_path): os.remove(eff_path)
 
-
-# ===== PROFESSIONAL ADMIN PANEL =====
 
 def build_admin_message(admin_text):
     safe_text = html.escape(admin_text)
@@ -649,7 +903,6 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id!= config.ADMIN_ID:
         await update.effective_message.reply_text("⛔ Siz admin emassiz!")
         return
-
     if update.message.reply_to_message:
         admin_text = update.message.reply_to_message.text or update.message.reply_to_message.caption or "Xabar"
     else:
@@ -657,17 +910,13 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("📢 Foydalanish: <code>/broadcast Salom!</code> yoki xabarga reply qilib /broadcast", parse_mode='HTML')
             return
         admin_text = " ".join(context.args)
-
     if not os.path.exists(USERS_FILE):
         await update.message.reply_text("😔 Hali user yo'q!")
         return
-
     with open(USERS_FILE, "r", encoding="utf-8") as f:
         users = [int(line.strip()) for line in f if line.strip().isdigit()]
-
     text, keyboard = build_admin_message(admin_text)
     status = await update.message.reply_text(f"🚀 {len(users)} ta userga yuborilmoqda...", parse_mode='HTML')
-
     success = 0
     for uid in users:
         try:
@@ -690,37 +939,28 @@ async def send_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             admin_text = update.message.reply_to_message.text or update.message.reply_to_message.caption or "Xabar"
         else:
             admin_text = " ".join(context.args[1:])
-
         text, keyboard = build_admin_message(admin_text)
         await context.bot.send_message(chat_id=target_id, text=text, parse_mode='HTML', reply_markup=keyboard)
         await update.message.reply_text(f"✅ {target_id} ga yuborildi!")
     except Exception as e:
         await update.message.reply_text(f"❌ Xato: {e}")
 
-
 async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from collections import Counter
-
     if not os.path.exists(TOP_FILE):
         await update.message.reply_text("😔 Hali TOP ro'yxat bo'sh! Birorta musiqa yuklang!")
         return
-
     try:
         with open(TOP_FILE, "r", encoding="utf-8") as f:
             lines = [line.strip() for line in f if line.strip()]
     except:
         lines = []
-
     if not lines:
         await update.message.reply_text("😔 Hali TOP ro'yxat bo'sh!")
         return
-
     counter = Counter(lines)
     top_20_titles = [title for title, count in counter.most_common(20)]
-
-    # Har bir top nomini YouTube dan qidirib ID olamiz
     status = await update.message.reply_text("🔥 <b>TOP 20 tayyorlanmoqda...</b> ⏳", parse_mode='HTML')
-
     results = []
     for t in top_20_titles:
         try:
@@ -731,21 +971,12 @@ async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         if len(results) >= 20:
             break
-
     if not results:
         await status.edit_text("😔 TOP ni chiqarib bo'lmadi!")
         return
-
     context.user_data['top_results'] = results
     context.user_data['top_page'] = 0
-
     text, _ = build_search_text("🔥 TOP 20 - Trend", results, 0)
-    kb = build_search_keyboard(results, 0)
-    # Tugmalarni TOP uchun qayta yasaymiz (callback bir xil dl_ bo'lgani uchun ishlaydi)
-    # Sahifa tugmalarini TOP ga moslaymiz
-    total_pages = (len(results) + PER_PAGE - 1) // PER_PAGE
-    # Keyboardni TOP pagination ga o'zgartirish
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     def build_top_keyboard(results, page):
         total_pages = (len(results) + PER_PAGE - 1) // PER_PAGE
         start = page * PER_PAGE
@@ -769,26 +1000,20 @@ async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if nav_row:
             keyboard.append(nav_row)
         return InlineKeyboardMarkup(keyboard)
-
     kb = build_top_keyboard(results, 0)
     await status.edit_text(text, parse_mode='HTML', reply_markup=kb)
-
 
 async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != config.ADMIN_ID:
         await update.message.reply_text("⛔ Siz admin emassiz!")
         return
-
     total = 0
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, "r", encoding="utf-8") as f:
             total = len([line for line in f if line.strip().isdigit()])
-
-    # Fayl hajmini ham ko'ramiz
     size_kb = 0
     if os.path.exists(USERS_FILE):
         size_kb = os.path.getsize(USERS_FILE) / 1024
-
     text = (
         f"📊 <b>Bot Statistikasi</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -813,7 +1038,7 @@ def main():
     app.add_handler(CommandHandler("stat", stats_cmd))
     app.add_handler(CommandHandler("users", stats_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.VOICE | filters.VIDEO | filters.VIDEO_NOTE | filters.AUDIO, handle_voice_video))
+    app.add_handler(MessageHandler(filters.VOICE | filters.VIDEO | filters.VIDEO_NOTE | filters.AUDIO | filters.Document.VIDEO, handle_voice_video))
     app.run_polling()
 
 if __name__ == '__main__':
