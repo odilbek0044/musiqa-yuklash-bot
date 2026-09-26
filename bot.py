@@ -7,7 +7,9 @@ import config
 
 
 logging.basicConfig(level=logging.INFO)
-DOWNLOAD_DIR = "downloads"
+DOWNLOAD_DIR = "/data/downloads"
+USERS_FILE = "/data/users.txt"
+TOP_FILE = "/data/top.txt"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 START_TEXT = f"""
@@ -32,7 +34,7 @@ Men siz uchun:
 2⃣ 🔍 Yoki qo'shiq nomini yozing:
    <code>Alan Walker - Alone</code>
 3⃣ 🎤 Golos yoki video yuboring!
-
+🏆 /top - Eng ko'p yuklangan musiqalarni TOP 20 taligini tinglang🎧
 Men darhol sizga <b>VIDEO + AUDIO</b> ni yuboraman! 🚀
 """
 
@@ -249,6 +251,11 @@ async def download_and_send(url, context, status_msg, chat_id):
                     except: pass
             try: await status_msg.delete()
             except: pass
+            try:
+                with open(TOP_FILE, "a", encoding="utf-8") as tf:
+                    tf.write(f"{title}\n")
+            except:
+                pass
             return True, cap_v, title, url
         except Exception as e:
             logging.error(f"Download urinish xato {fmt}: {e}")
@@ -358,7 +365,7 @@ async def handle_voice_video(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     try:
-        users_file = "users.txt"
+        users_file = USERS_FILE
         is_new = True
         if os.path.exists(users_file):
             with open(users_file, "r", encoding="utf-8") as f:
@@ -514,6 +521,41 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except: pass
         return
 
+    if query.data.startswith("top_page_"):
+        try:
+            page = int(query.data.split("_")[-1])
+            results = context.user_data.get('top_results', [])
+            if not results: return
+            context.user_data['top_page'] = page
+            text, _ = build_search_text("🔥 TOP 20 - Trend", results, page)
+            # TOP uchun keyboard
+            total_pages = (len(results) + PER_PAGE - 1) // PER_PAGE
+            start = page * PER_PAGE
+            end = start + PER_PAGE
+            chunk = results[start:end]
+            keyboard = []
+            row = []
+            for i, e in enumerate(chunk):
+                global_idx = start + i + 1
+                row.append(InlineKeyboardButton(f"{global_idx}", callback_data=f"dl_{e['id']}"))
+                if len(row) == 3:
+                    keyboard.append(row)
+                    row = []
+            if row:
+                keyboard.append(row)
+            nav_row = []
+            if page > 0:
+                nav_row.append(InlineKeyboardButton("❤ Avvalgisi", callback_data=f"top_page_{page-1}"))
+            if page < total_pages - 1:
+                nav_row.append(InlineKeyboardButton("🩷 Keyingisi", callback_data=f"top_page_{page+1}"))
+            if nav_row:
+                keyboard.append(nav_row)
+            kb = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+        except: pass
+        return
+   
+   
     if query.data == "about":
         await context.bot.send_message(chat_id=chat_id, text=ABOUT_TEXT, parse_mode='HTML', reply_markup=main_keyboard())
     elif query.data == "admin":
@@ -617,11 +659,11 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         admin_text = " ".join(context.args)
 
-    if not os.path.exists("users.txt"):
+    if not os.path.exists(USERS_FILE):
         await update.message.reply_text("😔 Hali user yo'q!")
         return
 
-    with open("users.txt", "r", encoding="utf-8") as f:
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
         users = [int(line.strip()) for line in f if line.strip().isdigit()]
 
     text, keyboard = build_admin_message(admin_text)
@@ -657,20 +699,96 @@ async def send_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Xato: {e}")
 
 
+async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from collections import Counter
+
+    if not os.path.exists(TOP_FILE):
+        await update.message.reply_text("😔 Hali TOP ro'yxat bo'sh! Birorta musiqa yuklang!")
+        return
+
+    try:
+        with open(TOP_FILE, "r", encoding="utf-8") as f:
+            lines = [line.strip() for line in f if line.strip()]
+    except:
+        lines = []
+
+    if not lines:
+        await update.message.reply_text("😔 Hali TOP ro'yxat bo'sh!")
+        return
+
+    counter = Counter(lines)
+    top_20_titles = [title for title, count in counter.most_common(20)]
+
+    # Har bir top nomini YouTube dan qidirib ID olamiz
+    status = await update.message.reply_text("🔥 <b>TOP 20 tayyorlanmoqda...</b> ⏳", parse_mode='HTML')
+
+    results = []
+    for t in top_20_titles:
+        try:
+            res = search_youtube(t)
+            if res:
+                results.append(res[0])
+        except:
+            pass
+        if len(results) >= 20:
+            break
+
+    if not results:
+        await status.edit_text("😔 TOP ni chiqarib bo'lmadi!")
+        return
+
+    context.user_data['top_results'] = results
+    context.user_data['top_page'] = 0
+
+    text, _ = build_search_text("🔥 TOP 20 - Trend", results, 0)
+    kb = build_search_keyboard(results, 0)
+    # Tugmalarni TOP uchun qayta yasaymiz (callback bir xil dl_ bo'lgani uchun ishlaydi)
+    # Sahifa tugmalarini TOP ga moslaymiz
+    total_pages = (len(results) + PER_PAGE - 1) // PER_PAGE
+    # Keyboardni TOP pagination ga o'zgartirish
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    def build_top_keyboard(results, page):
+        total_pages = (len(results) + PER_PAGE - 1) // PER_PAGE
+        start = page * PER_PAGE
+        end = start + PER_PAGE
+        chunk = results[start:end]
+        keyboard = []
+        row = []
+        for i, e in enumerate(chunk):
+            global_idx = start + i + 1
+            row.append(InlineKeyboardButton(f"{global_idx}", callback_data=f"dl_{e['id']}"))
+            if len(row) == 3:
+                keyboard.append(row)
+                row = []
+        if row:
+            keyboard.append(row)
+        nav_row = []
+        if page > 0:
+            nav_row.append(InlineKeyboardButton("❤ Avvalgisi", callback_data=f"top_page_{page-1}"))
+        if page < total_pages - 1:
+            nav_row.append(InlineKeyboardButton("🩷 Keyingisi", callback_data=f"top_page_{page+1}"))
+        if nav_row:
+            keyboard.append(nav_row)
+        return InlineKeyboardMarkup(keyboard)
+
+    kb = build_top_keyboard(results, 0)
+    await status.edit_text(text, parse_mode='HTML', reply_markup=kb)
+
+
 async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != config.ADMIN_ID:
         await update.message.reply_text("⛔ Siz admin emassiz!")
         return
 
     total = 0
-    if os.path.exists("users.txt"):
-        with open("users.txt", "r", encoding="utf-8") as f:
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
             total = len([line for line in f if line.strip().isdigit()])
 
     # Fayl hajmini ham ko'ramiz
     size_kb = 0
-    if os.path.exists("users.txt"):
-        size_kb = os.path.getsize("users.txt") / 1024
+    if os.path.exists(USERS_FILE):
+        size_kb = os.path.getsize(USERS_FILE) / 1024
 
     text = (
         f"📊 <b>Bot Statistikasi</b>\n"
@@ -687,6 +805,7 @@ def main():
     print(f"🤖 {config.BOT_NAME} ishga tushdi... ✨")
     app = ApplicationBuilder().token(config.BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("top", top_cmd)) 
     app.add_handler(InlineQueryHandler(inline_query_handler))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(CommandHandler("broadcast", broadcast))
